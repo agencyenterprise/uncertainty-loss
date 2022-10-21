@@ -260,6 +260,87 @@ def dirichlet_fisher_regulizer(
     return reducer(0.5 * torch.sum(prod, dim=1))
 
 
+def uncertainty(evidence: Tensor):
+    r"""Computes entropy from the model evidence.
+
+    Args:
+        evidence (Tensor): Evidence of model output.  The evidence is any non-negative
+            transformation math:`g(x)` of the raw unnormalized model outputs
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+
+    Returns:
+        A tensor of shape (batch_size), uncertainty score for
+        each element in the batch.
+    """
+    alpha = evidence + 1
+    s_alpha = torch.sum(alpha, dim=1, keepdim=True)
+    div_term = alpha / s_alpha
+    return -torch.sum(div_term * torch.log(div_term), dim=1)
+
+
+def cross_entropy_uncertainty(logits: Tensor):
+    r"""Computes uncertainty score from model logits trained with cross entropy loss.
+
+    Args:
+        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
+            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
+            optional dimensions.
+
+    Returns:
+        A tensor of shape (batch_size), uncertainty score for
+        each element in the batch.
+    """
+    return 1 - torch.max(F.softmax(logits, dim=1), dim=1).values
+
+
+def dirichlet_mode(evidence: Tensor):
+    r"""Converts logits to probabilities for models trained with uncertainty loss.
+
+    Args:
+        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
+            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
+            optional dimensions.
+
+    Returns:
+        A tensor of shape (batch_size, num_classes, d1,...,dk), probabilities for
+        each element in the batch.
+    """
+    alpha = evidence + 1
+    num_classes = evidence.shape[1]
+    s_alpha = torch.sum(alpha, dim=1, keepdim=True)
+    return alpha / (s_alpha - num_classes)
+
+
+def evidence_to_proba(evidence: Tensor):
+    r"""Converts logits to probabilities for models trained with uncertainty loss.
+
+    Args:
+        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
+            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
+            optional dimensions.
+
+    Returns:
+        A tensor of shape (batch_size, num_classes, d1,...,dk), probabilities for
+        each element in the batch.
+    """
+    return dirichlet_mode(evidence)
+
+
+def evidence_to_prediction(evidence: Tensor):
+    r"""Converts logits to predictions for models trained with uncertainty loss.
+
+    Args:
+        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
+            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
+            optional dimensions.
+
+    Returns:
+        A tensor of shape (batch_size, d1,...,dk), predictions for
+        each element in the batch.
+    """
+    return torch.argmax(evidence_to_proba(evidence), dim=1)
+
+
 def clamped_exp(x: Tensor, clamp: float = 10.0) -> Tensor:
     r"""This function clamps the input tensor to be between -clamp and clamp and
     then exponentiates it.
