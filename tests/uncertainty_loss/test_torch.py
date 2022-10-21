@@ -106,7 +106,7 @@ def make_incorrect_example(one_hot: bool, dims: int = 3):
 
 @pytest.mark.parametrize(
     "reduction,batch,expected",
-    [(None, 10, (10,)), ("none", 10, (10,)), ("mean", 10, ()), ("sum", 10, ())],
+    [("none", 10, (10,)), ("mean", 10, ()), ("sum", 10, ())],
 )
 def test_dirichlet_mse_loss_returns_correct_shape_with_reduction(
     reduction, batch, expected
@@ -114,7 +114,7 @@ def test_dirichlet_mse_loss_returns_correct_shape_with_reduction(
     """Verifies the shape of the mse loss tensor is correct."""
     y_true = torch.rand(batch, 3)
     y_pred = torch.rand(batch, 3)
-    loss = dirichlet_mse_loss(y_true, y_pred, reduction=reduction)
+    loss = dirichlet_mse_loss(y_pred, y_true, reduction=reduction)
     assert loss.shape == expected
 
 
@@ -155,21 +155,21 @@ def test_uniform_kl_regularization_is_not_zero_when_evidence_for_wrong_class(
 
 @pytest.mark.parametrize(
     "reduction,batch,expected",
-    [(None, 10, (10,)), ("none", 10, (10,)), ("mean", 10, ()), ("sum", 10, ())],
+    [("none", 10, (10, 5)), ("mean", 10, ()), ("sum", 10, ())],
 )
 def test_dirichlet_pnorm_loss_returns_correct_shape_with_reduction(
     reduction, batch, expected
 ):
     """Verifies the shape of the mse loss tensor is correct."""
-    y_true = torch.rand(batch, 3)
-    y_pred = torch.rand(batch, 3)
-    loss = dirichlet_pnorm_loss(y_true, y_pred, reduction=reduction)
+    y_true = torch.rand(batch, 3, 5)
+    y_pred = torch.rand(batch, 3, 5)
+    loss = dirichlet_pnorm_loss(y_pred, y_true, reduction=reduction)
     assert loss.shape == expected
 
 
 @pytest.mark.parametrize(
     "reduction,batch,expected",
-    [(None, 10, (10,)), ("none", 10, (10,)), ("mean", 10, ()), ("sum", 10, ())],
+    [("none", 10, (10,)), ("mean", 10, ()), ("sum", 10, ())],
 )
 def test_maxnorm_loss_returns_correct_shape_with_reduction(reduction, batch, expected):
     """Verifies the shape of the mse loss tensor is correct."""
