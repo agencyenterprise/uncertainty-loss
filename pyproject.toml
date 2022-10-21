@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "uncertainty-loss"
-version = "0.1.0"
+version = "0.1.1"
 description = "Uncertainty Loss functions for deep learning"
 authors = ["Mike Vaiana <mike@ae.studio>", "Bo Powers <bo.powers@ae.studio>"]
 readme = "README.md"
