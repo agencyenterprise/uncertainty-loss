@@ -8,7 +8,6 @@ from uncertainty_loss._torch import (  # noqa
     dirichlet_mode,
     dirichlet_mse_loss,
     dirichlet_pnorm_loss,
-    evidence_to_prediction,
     maxnorm_loss,
     uncertainty,
     uniform_dirichlet_kl,
@@ -257,7 +256,7 @@ def test_cross_entropy_uncertainty_is_high_when_evidence_for_multiple_classes(di
     shape = (1, 3) + (1,) * (dims - 2)
     logits = torch.tensor([100, 100, -100], dtype=torch.float32).reshape(shape)
     u = cross_entropy_uncertainty(logits)
-    assert 0.49 < u.item() < 0.51
+    assert u.item() > 0.6
 
 
 @pytest.mark.parametrize("dims", [2, 3, 4])

@@ -269,7 +269,7 @@ def uncertainty(evidence: Tensor):
             math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
 
     Returns:
-        A tensor of shape (batch_size), uncertainty score for
+        A tensor of shape (batch_size, d1,...dk), uncertainty score for
         each element in the batch.
     """
     alpha = evidence + 1
@@ -279,7 +279,7 @@ def uncertainty(evidence: Tensor):
 
 
 def cross_entropy_uncertainty(logits: Tensor):
-    r"""Computes uncertainty score from model logits trained with cross entropy loss.
+    r"""Computes entropy for the logits of a discrete distribution.
 
     Args:
         logits (Tensor): Raw outputs from a model trained with cross entropy loss.
@@ -287,10 +287,12 @@ def cross_entropy_uncertainty(logits: Tensor):
             optional dimensions.
 
     Returns:
-        A tensor of shape (batch_size), uncertainty score for
+        A tensor of shape (batch_size, d1,...,dk), uncertainty score for
         each element in the batch.
     """
-    return 1 - torch.max(F.softmax(logits, dim=1), dim=1).values
+    return -torch.sum(
+        torch.softmax(logits, dim=1) * torch.log_softmax(logits, dim=1), dim=1
+    )
 
 
 def dirichlet_mode(evidence: Tensor):
