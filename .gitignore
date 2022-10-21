@@ -135,3 +135,6 @@ logs/
 artifacts/
 *.pt
 *.ckpt
+
+# Example data
+examples/*/data
