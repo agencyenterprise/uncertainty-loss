@@ -3,10 +3,14 @@ import pytest
 torch = pytest.importorskip("torch")
 from uncertainty_loss._torch import (  # noqa
     clamped_exp,
+    cross_entropy_uncertainty,
     dirichlet_fisher_regulizer,
+    dirichlet_mode,
     dirichlet_mse_loss,
     dirichlet_pnorm_loss,
+    evidence_to_prediction,
     maxnorm_loss,
+    uncertainty,
     uniform_dirichlet_kl,
 )
 
@@ -203,3 +207,66 @@ def test_clamped_exp_clamps_before_exp(clamp):
     clampled = torch.clamp(x, min=-clamp, max=clamp)
     actual = clamped_exp(x, clamp=clamp)
     assert torch.all(actual == clampled.exp())
+
+
+@pytest.mark.parametrize("dims", [2, 3, 4])
+def test_uncertainty_quantification_is_low_with_high_evidence(dims):
+    """Verifies the uncertainty quantification is small when there is
+    a large amount of evidence a class.
+    """
+    shape = (1, 3) + (1,) * (dims - 2)
+    evidence = torch.tensor([10000, 0, 0]).reshape(shape)
+    u = uncertainty(evidence)
+    assert u.item() < 1e-2
+
+
+@pytest.mark.parametrize("dims", [2, 3, 4])
+def test_uncertainty_quantification_is_high_with_low_evidence(dims):
+    """Verifies the uncertainty quantification is large when there is
+    a small amount of evidence for any class.
+    """
+    shape = (1, 3) + (1,) * (dims - 2)
+    evidence = torch.tensor([1, 0, 0]).reshape(shape)
+    u = uncertainty(evidence)
+    assert u.item() > 0.9
+
+
+@pytest.mark.parametrize("dims", [2, 3, 4])
+def test_uncertainty_quantification_is_high_with_evidence_for_multiple_classes(dims):
+    """Verifies the uncertainty quantification is large when there is
+    a large amount of evidence for multiple classes.
+    """
+    shape = (1, 3) + (1,) * (dims - 2)
+    evidence = torch.tensor([100, 100, 0]).reshape(shape)
+    u = uncertainty(evidence)
+    assert u.item() > 0.7
+
+
+@pytest.mark.parametrize("dims", [2, 3, 4])
+def test_cross_entropy_uncertainty_is_low_when_evidence_for_one_class(dims):
+    """Verifies the cross entropy uncertainty is correct."""
+    shape = (1, 3) + (1,) * (dims - 2)
+    logits = torch.tensor([100, -100, -100], dtype=torch.float32).reshape(shape)
+    u = cross_entropy_uncertainty(logits)
+    assert u.item() < 1e-5
+
+
+@pytest.mark.parametrize("dims", [2, 3, 4])
+def test_cross_entropy_uncertainty_is_high_when_evidence_for_multiple_classes(dims):
+    """Verifies the cross entropy uncertainty is correct."""
+    shape = (1, 3) + (1,) * (dims - 2)
+    logits = torch.tensor([100, 100, -100], dtype=torch.float32).reshape(shape)
+    u = cross_entropy_uncertainty(logits)
+    assert 0.49 < u.item() < 0.51
+
+
+@pytest.mark.parametrize("dims", [2, 3, 4])
+def test_dirichlet_mode_returns_correct_pmfs(dims):
+    """Verifies the dirichlet mode is correct."""
+    shape = (1, 3) + (1,) * (dims - 2)
+    evidence = torch.tensor([100, 100, 100], dtype=torch.float32).reshape(shape)
+    expected = torch.tensor(
+        [101 / 300, 101 / 300, 101 / 300], dtype=torch.float32
+    ).reshape(shape)
+    pmf = dirichlet_mode(evidence)
+    torch.testing.assert_close(pmf, expected)
