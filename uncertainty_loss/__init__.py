@@ -1,3 +1,12 @@
+try:
+    import torch # noqa
+except ImportError:
+    raise ImportError(
+        "PyTorch is not installed.  Please install pytorch before using "
+        "uncertainy_loss. You can install pytorch with pip: pip install torch "
+        ) from None 
+
+
 from ._torch import (
     dirichlet_fisher_regulizer,
     dirichlet_mse_loss,
