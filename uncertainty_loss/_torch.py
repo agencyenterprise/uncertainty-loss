@@ -60,10 +60,7 @@ def dirichlet_mse_loss(
     alpha = evidence + 1  # (batch_size, num_clases)
     s_alpha = torch.sum(alpha, dim=1, keepdim=True)  # (batch_size,1)
     p_hat = alpha / s_alpha  # (batch_size, num_clases), \hat{p_ij} from paper
-
-    # enforce one hot targets
-    if target.dim() == 1:
-        target = F.one_hot(target, num_classes=evidence.shape[1])
+    target = enfore_same_dim(target, evidence)
 
     error_term = torch.square(target - p_hat)
 
@@ -104,20 +101,16 @@ def uniform_dirichlet_kl(
     lgamma = torch.lgamma
     digamma = torch.digamma
     device = evidence.device
-    num_classes = evidence.shape[1]
 
     alpha = evidence + 1  # ( batch_size, num_classes)
-    beta = torch.ones((1, num_classes), device=device)  # (1, num_classes)
+    beta = torch.ones((1, *evidence.shape[1:]), device=device)  # (1, num_classes)
 
-    # Sparse targets
-    if target.dim() == 1:
-        target = F.one_hot(target, num_classes=num_classes).float()
-
+    target = enfore_same_dim(target, evidence)
     alpha = target + (1 - target) * alpha  # alpha_hat from the paper
 
     # sums
     s_alpha = torch.sum(alpha, dim=1, keepdim=True)  # (batch_size, 1)
-    s_beta = torch.sum(beta)  # scalar == num_classes
+    s_beta = torch.sum(beta, dim=1)  # (batch_size, d1, d2, ..., dn)
 
     # compute the terms contributing to final sum
     alpha_term = lgamma(s_alpha) - torch.sum(lgamma(alpha), dim=1)
@@ -192,8 +185,7 @@ def dirichlet_pnorm_loss(
     """
     p = p_norm
     lgamma = torch.lgamma
-    if target.dim() == 1:
-        target = torch.nn.functional.one_hot(target, num_classes=evidence.shape[1])
+    target = enfore_same_dim(target, evidence)
 
     alpha = evidence + 1
 
@@ -248,9 +240,7 @@ def dirichlet_fisher_regulizer(
     Returns:
         (Tensor) The mean dirichlet fisher regulizer over the batch
     """
-    if target.dim() == 1:
-        target = torch.nn.functional.one_hot(target, num_classes=evidence.shape[1])
-
+    target = enfore_same_dim(target, evidence)
     alpha = evidence + 1
     alpha_hat = alpha.clone()
     mask = target > 0
@@ -292,3 +282,27 @@ def get_reducer(reduction: Optional[str] = None):
         raise ValueError(
             f"reduction must be one of 'mean', 'sum', 'none' or None, got {reduction}"
         )
+
+
+def enfore_same_dim(target: Tensor, evidence: Tensor) -> Tensor:
+    """Enforces that target is one-hot encoded so that it is
+    the same numer of dimensions as the evidence tensor.
+
+    This is required to handle the case where the evidence tensor
+    is shape (batch, num_classes, d_1, ... d_k) and the target
+    tensor is sparse encoded as shape (batch, d_1, ... d_k).
+
+    Args:
+        target (Tensor): The target tensor.
+
+    Returns:
+        (Tensor) The one hot encoded target tensor.
+    """
+    if target.dim() != evidence.dim():
+        target = F.one_hot(
+            target.reshape(target.size(0), -1), num_classes=evidence.shape[1]
+        )
+        # (batch, prod(d1,...,dk), classes) -> (batch, classes, d1,...,dk)
+        target = torch.transpose(target, 1, 2).reshape(evidence.shape)
+
+    return target
