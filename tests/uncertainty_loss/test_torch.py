@@ -2,10 +2,11 @@ import pytest
 
 torch = pytest.importorskip("torch")
 from uncertainty_loss._torch import (  # noqa
+    clamped_exp,
     dirichlet_fisher_regulizer,
     dirichlet_mse_loss,
     dirichlet_pnorm_loss,
-    maxnorm_uncertainty_loss,
+    maxnorm_loss,
     uniform_dirichlet_kl,
 )
 
@@ -171,7 +172,7 @@ def test_maxnorm_loss_returns_correct_shape_with_reduction(reduction, batch, exp
     """Verifies the shape of the mse loss tensor is correct."""
     y_true = torch.rand(batch, 3)
     y_pred = torch.rand(batch, 3)
-    loss = maxnorm_uncertainty_loss(y_true, y_pred, reg_factor=1.0, reduction=reduction)
+    loss = maxnorm_loss(y_true, y_pred, reg_factor=1.0, reduction=reduction)
     assert loss.shape == expected
 
 
@@ -193,3 +194,12 @@ def test_fisher_regularization_is_not_zero_when_evidence_for_wrong_class(one_hot
     y_pred, y_true = make_incorrect_example(one_hot, dims)
     loss = dirichlet_fisher_regulizer(y_pred, y_true)
     assert loss.item() > 0
+
+
+@pytest.mark.parametrize("clamp", [0.0, 1.0, 10.0])
+def test_clamped_exp_clamps_before_exp(clamp):
+    """Verifies that the clamped exp function clamps before taking the exp."""
+    x = torch.tensor([[-100.0, 0.0, 100.0]])
+    clampled = torch.clamp(x, min=-clamp, max=clamp)
+    actual = clamped_exp(x, clamp=clamp)
+    assert torch.all(actual == clampled.exp())

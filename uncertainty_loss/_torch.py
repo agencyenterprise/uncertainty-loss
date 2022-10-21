@@ -5,7 +5,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 
-def evidential_uncertainty_loss(
+def evidential_loss(
     evidence: Tensor,
     target: Tensor,
     reg_factor: float = 0.0,
@@ -60,13 +60,13 @@ def dirichlet_mse_loss(
     alpha = evidence + 1  # (batch_size, num_clases)
     s_alpha = torch.sum(alpha, dim=1, keepdim=True)  # (batch_size,1)
     p_hat = alpha / s_alpha  # (batch_size, num_clases), \hat{p_ij} from paper
-    target = enfore_same_dim(target, evidence)
+    target = _enforce_same_dim(target, evidence)
 
     error_term = torch.square(target - p_hat)
 
     var_term = p_hat * (1 - p_hat) / (s_alpha + 1)  # (batch_size, num_classes)
     mse = torch.sum(error_term + var_term, dim=1)
-    reducer = get_reducer(reduction)
+    reducer = _get_reducer(reduction)
     return reducer(mse)
 
 
@@ -105,7 +105,7 @@ def uniform_dirichlet_kl(
     alpha = evidence + 1  # ( batch_size, num_classes)
     beta = torch.ones((1, *evidence.shape[1:]), device=device)  # (1, num_classes)
 
-    target = enfore_same_dim(target, evidence)
+    target = _enforce_same_dim(target, evidence)
     alpha = target + (1 - target) * alpha  # alpha_hat from the paper
 
     # sums
@@ -118,11 +118,11 @@ def uniform_dirichlet_kl(
     digamma_term = (alpha - beta) * (digamma(alpha) - digamma(s_alpha))
     digamma_term = torch.sum(digamma_term, dim=1)
 
-    reducer = get_reducer(reduction)
+    reducer = _get_reducer(reduction)
     return reducer(alpha_term + beta_term + digamma_term)
 
 
-def maxnorm_uncertainty_loss(
+def maxnorm_loss(
     evidence: Tensor,
     target: Tensor,
     reg_factor: float = 0.0,
@@ -185,7 +185,7 @@ def dirichlet_pnorm_loss(
     """
     p = p_norm
     lgamma = torch.lgamma
-    target = enfore_same_dim(target, evidence)
+    target = _enforce_same_dim(target, evidence)
 
     alpha = evidence + 1
 
@@ -214,7 +214,7 @@ def dirichlet_pnorm_loss(
     logsumexp_term = torch.logsumexp(lse, dim=1)
 
     loss = torch.exp((factored_term + logsumexp_term) / p)
-    reducer = get_reducer(reduction)
+    reducer = _get_reducer(reduction)
     return reducer(loss)
 
 
@@ -240,7 +240,7 @@ def dirichlet_fisher_regulizer(
     Returns:
         (Tensor) The mean dirichlet fisher regulizer over the batch
     """
-    target = enfore_same_dim(target, evidence)
+    target = _enforce_same_dim(target, evidence)
     alpha = evidence + 1
     alpha_hat = alpha.clone()
     mask = target > 0
@@ -256,11 +256,25 @@ def dirichlet_fisher_regulizer(
     s_alpha_hat = torch.sum(alpha_hat, dim=1, keepdim=True)
     polygamma_term = torch.polygamma(1, alpha_hat) - torch.polygamma(1, s_alpha_hat)
     prod = torch.square(alpha_minus_one) * polygamma_term
-    reducer = get_reducer(reduction)
+    reducer = _get_reducer(reduction)
     return reducer(0.5 * torch.sum(prod, dim=1))
 
 
-def get_reducer(reduction: Optional[str] = None):
+def clamped_exp(x: Tensor, clamp: float = 10.0) -> Tensor:
+    r"""This function clamps the input tensor to be between -clamp and clamp and
+    then exponentiates it.
+
+    Args:
+        x (Tensor): The input tensor.
+        clamp (float): The clamp value.
+
+    Returns:
+        (Tensor) The clamped and exponentiated tensor.
+    """
+    return torch.exp(torch.clamp(x, -clamp, clamp))
+
+
+def _get_reducer(reduction: Optional[str] = None):
     """Returns a reducer function for the given reduction type.
 
     Args:
@@ -284,7 +298,7 @@ def get_reducer(reduction: Optional[str] = None):
         )
 
 
-def enfore_same_dim(target: Tensor, evidence: Tensor) -> Tensor:
+def _enforce_same_dim(target: Tensor, evidence: Tensor) -> Tensor:
     """Enforces that target is one-hot encoded so that it is
     the same numer of dimensions as the evidence tensor.
 
