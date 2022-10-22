@@ -10,12 +10,15 @@ except ImportError:
 from ._torch import (
     clamped_exp,
     cross_entropy_uncertainty,
+    data_uncertainty,
     dirichlet_fisher_regulizer,
     dirichlet_mse_loss,
     dirichlet_pnorm_loss,
+    entropy,
     evidence_to_proba,
     evidential_loss,
     maxnorm_loss,
+    model_uncertainty,
     uncertainty,
     uniform_dirichlet_kl,
 )
@@ -23,12 +26,15 @@ from ._torch import (
 __all__ = [
     "clamped_exp",
     "cross_entropy_uncertainty",
+    "data_uncertainty",
     "dirichlet_fisher_regulizer",
     "dirichlet_mse_loss",
     "dirichlet_pnorm_loss",
+    "entropy",
     "evidence_to_proba",
     "evidential_loss",
     "maxnorm_loss",
+    "model_uncertainty",
     "uncertainty",
     "uniform_dirichlet_kl",
 ]

@@ -15,7 +15,10 @@ def evidential_loss(
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
         target (Tensor): Ground truth class indicies or class probabilities.
         reg_factor (float): The regularization factor.  If 0, no regularization is
             performed.  If > 0, the regularization term is added to the loss with
@@ -48,7 +51,10 @@ def dirichlet_mse_loss(
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=exp(x)`, `g=relu(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
         target (Tensor): Ground truth class indicies or class probabilities.
         reduction (str): The reduction type.  Must be one of
             ['mean', 'sum', 'none', None]. If None or 'none' no reduction
@@ -87,7 +93,10 @@ def uniform_dirichlet_kl(
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
         target (Tensor): Ground truth class indicies or class probabilities.
         reduction (str): The reduction type.  Must be one of
             ['mean', 'sum', 'none', None]. If None or 'none' no reduction
@@ -134,7 +143,10 @@ def maxnorm_loss(
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
         target (Tensor): Ground truth class indicies or class probabilities.
         reg_factor (float): The weight of regularization factor.  If 0,
             no regularization is applied.
@@ -173,7 +185,10 @@ def dirichlet_pnorm_loss(
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
         target (Tensor): Ground truth class indicies or class probabilities.
         p_norm (int): The p-norm to use for the max norm approximation.
         reduction (str): The reduction type.  Must be one of
@@ -206,13 +221,18 @@ def dirichlet_pnorm_loss(
     s_alpha = torch.sum(alpha, dim=1, keepdim=True)
     s_alpha_hat = torch.sum(alpha_hat, dim=1, keepdim=True)
 
-    factored_term = torch.squeeze(lgamma(s_alpha) - lgamma(s_alpha + p))
-    logsumexp_term_0 = lgamma(s_alpha_hat + p) - lgamma(s_alpha_hat)
+    factored_term = torch.squeeze(
+        lgamma(s_alpha) - lgamma(s_alpha + p)
+    )  # (batch_size,d1, d2, ..., dn) # noqa
+    logsumexp_term_0 = lgamma(s_alpha_hat + p) - lgamma(
+        s_alpha_hat
+    )  # (batch_size, 1, d1, d2, ..., dn) # noqa
     logsumexp_term_1 = lgamma(alpha_negp + p) - lgamma(alpha_hat)
 
-    lse = torch.cat([logsumexp_term_0, logsumexp_term_1], dim=1)
-    logsumexp_term = torch.logsumexp(lse, dim=1)
-
+    lse = torch.cat(
+        [logsumexp_term_0, logsumexp_term_1], dim=1
+    )  # (batch_size, 2, d1, d2, ..., dn) # noqa
+    logsumexp_term = torch.logsumexp(lse, dim=1)  # (batch_size, d1, d2, ..., dn)
     loss = torch.exp((factored_term + logsumexp_term) / p)
     reducer = _get_reducer(reduction)
     return reducer(loss)
@@ -231,7 +251,10 @@ def dirichlet_fisher_regulizer(
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
         target (Tensor): Ground truth class indicies or class probabilities.
         reduction (str): The reduction type.  Must be one of
             ['mean', 'sum', 'none', None]. If None or 'none' no reduction
@@ -240,6 +263,8 @@ def dirichlet_fisher_regulizer(
     Returns:
         (Tensor) The mean dirichlet fisher regulizer over the batch
     """
+    # if target.dim() == 1:
+    #     target = torch.nn.functional.one_hot(target, num_classes=evidence.shape[1])
     target = _enforce_same_dim(target, evidence)
     alpha = evidence + 1
     alpha_hat = alpha.clone()
@@ -260,22 +285,69 @@ def dirichlet_fisher_regulizer(
     return reducer(0.5 * torch.sum(prod, dim=1))
 
 
-def uncertainty(evidence: Tensor):
-    r"""Computes entropy from the model evidence.
+def entropy(y_proba: Tensor, normalize=False):
+    _entropy = -torch.sum(y_proba * torch.log(y_proba), dim=1)
+    if normalize:
+        max_entropy = torch.log(torch.tensor(y_proba.shape[1]))
+        _entropy = _entropy / max_entropy
+    return _entropy
+
+
+def uncertainty(evidence: Tensor, normalize=False):
+    """Computes the predictive entropy from the class probabilities.
+
+    Args:
+        y_proba (Tensor): The class probabilities of shape (N,C, d1,...,dk).
+            where N is the number of samples, C is the number of classes and
+            d1,...,dk optional additional dimensions of the output.
+    Returns:
+        (Tensor) The uncertainty scores of shape (N, d1,...,dk).
+    """
+    alpha = evidence + 1
+    y_proba = alpha / torch.sum(alpha, dim=1, keepdim=True)
+    return entropy(y_proba, normalize=normalize)
+
+
+def model_uncertainty(evidence: Tensor):
+    """Computes the epistemic (model or knowledge) uncertainty.
 
     Args:
         evidence (Tensor): Evidence of model output.  The evidence is any non-negative
             transformation math:`g(x)` of the raw unnormalized model outputs
-            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc.
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
+
+
+    Returns:
+        (Tensor) The model uncertainty scores of shape (N, d1,...,dk).
+
+    """
+    total_uncertainty = uncertainty(evidence)
+    alpha = evidence + 1
+    s_alpha = torch.sum(alpha, dim=1, keepdim=True)
+    div_term = alpha / s_alpha
+    gamma_term = torch.digamma(s_alpha + 1) - torch.digamma(alpha + 1)
+    return total_uncertainty - torch.sum(div_term * gamma_term, dim=1)
+
+
+def data_uncertainty(evidence: Tensor):
+    r"""Computes aleatoric (data) uncertainty from the model evidence.
+
+    Args:
+        evidence (Tensor): Evidence of model output.  The evidence is any non-negative
+            transformation math:`g(x)` of the raw unnormalized model outputs
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
 
     Returns:
         A tensor of shape (batch_size, d1,...dk), uncertainty score for
         each element in the batch.
     """
-    alpha = evidence + 1
-    s_alpha = torch.sum(alpha, dim=1, keepdim=True)
-    div_term = alpha / s_alpha
-    return -torch.sum(div_term * torch.log(div_term), dim=1)
+    return uncertainty(evidence) - model_uncertainty(evidence)
 
 
 def cross_entropy_uncertainty(logits: Tensor):
@@ -299,9 +371,12 @@ def dirichlet_mode(evidence: Tensor):
     r"""Converts logits to probabilities for models trained with uncertainty loss.
 
     Args:
-        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
-            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
-            optional dimensions.
+        evidence (Tensor): Evidence of model output.  The evidence is any non-negative
+            transformation math:`g(x)` of the raw unnormalized model outputs
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
 
     Returns:
         A tensor of shape (batch_size, num_classes, d1,...,dk), probabilities for
@@ -317,30 +392,18 @@ def evidence_to_proba(evidence: Tensor):
     r"""Converts logits to probabilities for models trained with uncertainty loss.
 
     Args:
-        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
-            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
-            optional dimensions.
+        evidence (Tensor): Evidence of model output.  The evidence is any non-negative
+            transformation math:`g(x)` of the raw unnormalized model outputs
+            math:`x`.  For example `g=relu(x)`, `g=exp(x)` etc. The shape is
+            (N,C, d1,...,dk) where N is the number of samples, C is the
+            number of classes and d1,...,dk optional additional
+            dimensions.
 
     Returns:
         A tensor of shape (batch_size, num_classes, d1,...,dk), probabilities for
         each element in the batch.
     """
     return dirichlet_mode(evidence)
-
-
-def evidence_to_prediction(evidence: Tensor):
-    r"""Converts logits to predictions for models trained with uncertainty loss.
-
-    Args:
-        logits (Tensor): Raw outputs from a model trained with cross entropy loss.
-            must be shape (batch_size, num_classes, d1,...,dk) where d1,...,dk are
-            optional dimensions.
-
-    Returns:
-        A tensor of shape (batch_size, d1,...,dk), predictions for
-        each element in the batch.
-    """
-    return torch.argmax(evidence_to_proba(evidence), dim=1)
 
 
 def clamped_exp(x: Tensor, clamp: float = 10.0) -> Tensor:
@@ -357,19 +420,17 @@ def clamped_exp(x: Tensor, clamp: float = 10.0) -> Tensor:
     return torch.exp(torch.clamp(x, -clamp, clamp))
 
 
-def _get_reducer(reduction: Optional[str] = None):
+def _get_reducer(reduction: Optional[str] = "mean"):
     """Returns a reducer function for the given reduction type.
 
     Args:
         reduction (str): The reduction type.  Must be one of
-            ['mean', 'sum', 'none', None]. If None or 'none' no reduction
-            is performed. Default is None.
+            ['mean', 'sum', 'none']. If 'none' no reduction
+            is performed. Default is 'mean'.
     Returns:
         (Callable) A reducer function.
     """
-    if reduction is None:
-        return lambda x: x
-    elif reduction == "mean":
+    if reduction == "mean":
         return torch.mean
     elif reduction == "sum":
         return torch.sum
@@ -377,13 +438,13 @@ def _get_reducer(reduction: Optional[str] = None):
         return lambda x: x
     else:
         raise ValueError(
-            f"reduction must be one of 'mean', 'sum', 'none' or None, got {reduction}"
+            f"reduction must be one of 'mean', 'sum', or 'none' got {reduction}"
         )
 
 
 def _enforce_same_dim(target: Tensor, evidence: Tensor) -> Tensor:
     """Enforces that target is one-hot encoded so that it is
-    the same numer of dimensions as the evidence tensor.
+    the same number of dimensions as the evidence tensor.
 
     This is required to handle the case where the evidence tensor
     is shape (batch, num_classes, d_1, ... d_k) and the target
